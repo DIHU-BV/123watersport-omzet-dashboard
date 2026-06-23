@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>123watersport · Omzetdashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Login -->
+  <div id="login">
+    <form class="login-card" id="login-form">
+      <h1>📊 Omzetdashboard</h1>
+      <p>123watersport — log in om de cijfers te bekijken</p>
+      <input type="email" id="email" placeholder="E-mailadres" autocomplete="username" required />
+      <input type="password" id="password" placeholder="Wachtwoord" autocomplete="current-password" required />
+      <button class="btn" type="submit">Inloggen</button>
+      <div class="err" id="login-err"></div>
+    </form>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="app" class="hidden">
+    <header>
+      <div class="title">📊 123watersport · Omzet</div>
+      <div class="controls">
+        <label>Periode</label>
+        <select id="preset">
+          <option value="7">Laatste 7 dagen</option>
+          <option value="30" selected>Laatste 30 dagen</option>
+          <option value="90">Laatste 90 dagen</option>
+          <option value="month">Deze maand</option>
+          <option value="custom">Aangepast…</option>
+        </select>
+        <input type="date" id="start" class="hidden" />
+        <input type="date" id="end" class="hidden" />
+        <div class="seg" id="btw">
+          <button data-basis="incl" class="active">Incl. btw</button>
+          <button data-basis="excl">Excl. btw</button>
+        </div>
+        <button class="btn ghost" id="logout">Uitloggen</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="refreshed" id="refreshed"></div>
+      <div class="kpis" id="kpis"></div>
+
+      <div class="panel">
+        <h2>Omzet, adspend &amp; ROAS per dag</h2>
+        <canvas id="chart"></canvas>
+      </div>
+
+      <div class="panel">
+        <h2>Per dag</h2>
+        <div class="muted" style="margin-bottom:8px">Klik op een kolomkop om te sorteren.</div>
+        <div class="tablewrap"><table id="daily"><thead></thead><tbody></tbody></table></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
