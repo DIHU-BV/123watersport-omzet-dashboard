@@ -61,6 +61,11 @@ function range() {
   let start = new Date();
   if (preset === "custom") {
     return { start: $("start").value, end: $("end").value };
+  } else if (preset === "today") {
+    /* start = end = vandaag (default) */
+  } else if (preset === "yesterday") {
+    start.setDate(start.getDate() - 1);
+    end.setDate(end.getDate() - 1);
   } else if (preset === "month") {
     start = new Date(end.getFullYear(), end.getMonth(), 1);
   } else {
