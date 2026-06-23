@@ -5,6 +5,10 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let BASIS = "incl"; // incl | excl
 let lastRows = [];
 let sortKey = "date", sortDir = -1;
+let currentView = "overview";
+let prodRows = [];               // geaggregeerd per product
+let prodSortKey = "omzet", prodSortDir = -1;
+const lineCache = {};            // product_id -> order_lines (drill-down)
 
 // ── formatting (NL) ────────────────────────────────────────────────
 const eur = (v) => "€ " + (Number(v) || 0).toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -22,7 +26,22 @@ async function init() {
 }
 
 function showLogin() { $("login").classList.remove("hidden"); $("app").classList.add("hidden"); }
-function showApp() { $("login").classList.add("hidden"); $("app").classList.remove("hidden"); load(); }
+function showApp() { $("login").classList.add("hidden"); $("app").classList.remove("hidden"); loadCurrent(); }
+
+// ── tabs / views ───────────────────────────────────────────────────
+document.querySelectorAll("#tabs button").forEach((b) =>
+  b.addEventListener("click", () => {
+    document.querySelectorAll("#tabs button").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active");
+    currentView = b.dataset.view;
+    $("view-overview").classList.toggle("hidden", currentView !== "overview");
+    $("view-products").classList.toggle("hidden", currentView !== "products");
+    loadCurrent();
+  })
+);
+
+function loadCurrent() { return currentView === "products" ? loadProducts() : loadOverview(); }
+function rerender() { return currentView === "products" ? renderProducts() : render(); }
 
 $("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -58,17 +77,18 @@ $("preset").addEventListener("change", () => {
     const r = range();
     if (!$("start").value) $("start").value = r.start;
     if (!$("end").value) $("end").value = r.end;
-  } else load();
+  } else loadCurrent();
 });
-$("start").addEventListener("change", load);
-$("end").addEventListener("change", load);
+$("start").addEventListener("change", loadCurrent);
+$("end").addEventListener("change", loadCurrent);
 
 document.querySelectorAll("#btw button").forEach((b) =>
   b.addEventListener("click", () => {
     document.querySelectorAll("#btw button").forEach((x) => x.classList.remove("active"));
     b.classList.add("active");
     BASIS = b.dataset.basis;
-    render();
+    Object.keys(lineCache).forEach((k) => delete lineCache[k]); // varianten herrekenen
+    rerender();
   })
 );
 
@@ -81,7 +101,7 @@ async function fetchDaily(start, end) {
   return data;
 }
 
-async function load() {
+async function loadOverview() {
   const { start, end } = range();
   if (!start || !end) return;
   $("kpis").innerHTML = '<div class="loading">Laden…</div>';
@@ -212,6 +232,105 @@ function renderTable() {
   });
   tbody.innerHTML = rows.map((r) =>
     "<tr>" + COLS.map(([, , fn]) => `<td>${fn(r)}</td>`).join("") + "</tr>").join("");
+}
+
+// ── Omzet per product ──────────────────────────────────────────────
+async function loadProducts() {
+  const { start, end } = range();
+  if (!start || !end) return;
+  $("prod-kpis").innerHTML = '<div class="loading">Laden…</div>';
+  const { data, error } = await sb.from("dash_product_daily").select("*").gte("date", start).lte("date", end);
+  if (error) console.error(error);
+  const map = {};
+  (data || []).forEach((r) => {
+    const m = map[r.product_id] || (map[r.product_id] = {
+      product_id: r.product_id, title: r.product_title, path: r.product_path,
+      qty: 0, orders: 0, revenue_incl: 0, revenue_excl: 0,
+    });
+    m.qty += +r.qty; m.orders += +r.orders;
+    m.revenue_incl += +r.revenue_incl; m.revenue_excl += +r.revenue_excl;
+    if (!m.title && r.product_title) m.title = r.product_title;
+    if (!m.path && r.product_path) m.path = r.product_path;
+  });
+  prodRows = Object.values(map);
+  renderProducts();
+}
+
+function prodRev(r) { return Number(BASIS === "incl" ? r.revenue_incl : r.revenue_excl); }
+
+function renderProducts() {
+  const totaal = prodRows.reduce((s, r) => s + prodRev(r), 0);
+  const totQty = prodRows.reduce((s, r) => s + Number(r.qty), 0);
+  $("prod-kpis").innerHTML = [
+    ["Productomzet", eur(totaal)], ["Producten", num(prodRows.length)], ["Stuks verkocht", num(totQty)],
+  ].map(([l, v]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v}</div></div>`).join("");
+
+  const cols = [
+    ["title", "Product", (r) => r.title || ("Product " + r.product_id)],
+    ["qty", "Aantal", (r) => num(r.qty)],
+    ["orders", "Orders", (r) => num(r.orders)],
+    ["omzet", "Omzet", (r) => eur(prodRev(r))],
+    ["aandeel", "Aandeel", (r) => (totaal ? (prodRev(r) / totaal * 100).toFixed(1) + "%" : "0%")],
+  ];
+  const thead = document.querySelector("#products thead");
+  const tbody = document.querySelector("#products tbody");
+  thead.innerHTML = "<tr><th></th>" + cols.map(([k, l]) =>
+    `<th data-k="${k}">${l}${prodSortKey === k ? (prodSortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("") + "</tr>";
+  thead.querySelectorAll("th[data-k]").forEach((th) => th.addEventListener("click", () => {
+    const k = th.dataset.k;
+    if (prodSortKey === k) prodSortDir *= -1; else { prodSortKey = k; prodSortDir = -1; }
+    renderProducts();
+  }));
+  const sv = (r, k) => (k === "omzet" || k === "aandeel") ? prodRev(r) : k === "title" ? (r.title || "").toLowerCase() : Number(r[k]);
+  const rows = [...prodRows].sort((a, b) => {
+    const va = sv(a, prodSortKey), vb = sv(b, prodSortKey);
+    return (va > vb ? 1 : va < vb ? -1 : 0) * prodSortDir;
+  });
+  tbody.innerHTML = rows.map((r) =>
+    `<tr class="prow" data-pid="${r.product_id}"><td><span class="caret">▸</span></td>` +
+    cols.map(([, , fn]) => `<td>${fn(r)}</td>`).join("") + "</tr>").join("");
+  tbody.querySelectorAll("tr.prow").forEach((tr) => tr.addEventListener("click", () => toggleProduct(tr)));
+}
+
+async function fetchLines(pid) {
+  if (lineCache[pid]) return lineCache[pid];
+  const { start, end } = range();
+  const { data } = await sb.from("dash_order_lines").select("*")
+    .eq("product_id", pid).gte("date", start).lte("date", end).order("date", { ascending: false });
+  lineCache[pid] = data || [];
+  return lineCache[pid];
+}
+
+async function toggleProduct(tr) {
+  const pid = tr.dataset.pid;
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains("detail")) { next.remove(); tr.querySelector(".caret").textContent = "▸"; return; }
+  tr.querySelector(".caret").textContent = "▾";
+  const detail = document.createElement("tr");
+  detail.className = "detail";
+  detail.innerHTML = `<td colspan="6"><div class="detail-inner">Laden…</div></td>`;
+  tr.after(detail);
+  const lines = await fetchLines(pid);
+  detail.querySelector(".detail-inner").innerHTML = detailHtml(pid, lines);
+}
+
+function detailHtml(pid, lines) {
+  const prod = prodRows.find((p) => String(p.product_id) === String(pid)) || {};
+  const vmap = {};
+  lines.forEach((l) => {
+    const k = l.variant_title || "—";
+    const v = vmap[k] || (vmap[k] = { variant: k, qty: 0, rev: 0 });
+    v.qty += Number(l.qty); v.rev += prodRev(l);
+  });
+  const variants = Object.values(vmap).sort((a, b) => b.rev - a.rev);
+  const varTable = (variants.length > 1 || (variants[0] && variants[0].variant !== "—"))
+    ? `<h4>Per variant</h4><table><thead><tr><th style="text-align:left">Variant</th><th>Aantal</th><th>Omzet</th></tr></thead><tbody>` +
+      variants.map((v) => `<tr><td style="text-align:left">${v.variant}</td><td>${num(v.qty)}</td><td>${eur(v.rev)}</td></tr>`).join("") + `</tbody></table>`
+    : "";
+  const pathHtml = prod.path ? `<div class="path">🔗 Productpad: <code>${prod.path}</code></div>` : "";
+  const orders = `<h4>Orders met dit product (${lines.length})</h4><table><thead><tr><th style="text-align:left">Order</th><th>Datum</th><th style="text-align:left">Klant</th><th>Aantal</th><th>Omzet</th></tr></thead><tbody>` +
+    lines.map((l) => `<tr><td style="text-align:left">${l.order_number || l.order_id}</td><td>${l.date}</td><td style="text-align:left">${l.customer_name || ""}</td><td>${num(l.qty)}</td><td>${eur(prodRev(l))}</td></tr>`).join("") + `</tbody></table>`;
+  return pathHtml + varTable + orders;
 }
 
 init();

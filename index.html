@@ -42,20 +42,40 @@
       </div>
     </header>
 
+    <nav class="tabs" id="tabs">
+      <button data-view="overview" class="active">Overzicht</button>
+      <button data-view="products">Omzet per product</button>
+    </nav>
+
     <main>
       <div class="refreshed" id="refreshed"></div>
-      <div class="kpis" id="kpis"></div>
 
-      <div class="panel">
-        <h2>Omzet, adspend &amp; ROAS per dag</h2>
-        <canvas id="chart"></canvas>
-      </div>
+      <!-- Overzicht -->
+      <section id="view-overview">
+        <div class="kpis" id="kpis"></div>
+        <div class="panel">
+          <h2>Omzet, adspend &amp; ROAS per dag</h2>
+          <canvas id="chart"></canvas>
+        </div>
+        <div class="panel">
+          <h2>Per dag</h2>
+          <div class="muted" style="margin-bottom:8px">Klik op een kolomkop om te sorteren.</div>
+          <div class="tablewrap"><table id="daily"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
 
-      <div class="panel">
-        <h2>Per dag</h2>
-        <div class="muted" style="margin-bottom:8px">Klik op een kolomkop om te sorteren.</div>
-        <div class="tablewrap"><table id="daily"><thead></thead><tbody></tbody></table></div>
-      </div>
+      <!-- Omzet per product -->
+      <section id="view-products" class="hidden">
+        <div class="kpis" id="prod-kpis"></div>
+        <div class="panel">
+          <h2>Omzet per product</h2>
+          <div class="muted" style="margin-bottom:8px">
+            Klik op een kolomkop om te sorteren · klik op een productrij om uit te klappen
+            (varianten + de losse orders).
+          </div>
+          <div class="tablewrap"><table id="products"><thead></thead><tbody></tbody></table></div>
+        </div>
+      </section>
     </main>
   </div>
 
