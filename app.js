@@ -161,7 +161,6 @@ function render() {
     ["Omzet (totaal)", eur(c.omzet), c.omzet, p.omzet, false],
     ["Adspend", eur(c.adspend), c.adspend, p.adspend, true],
     ["Ad-omzet", eur(c.ad_omzet), c.ad_omzet, p.ad_omzet, false],
-    ["ROAS (ads)", c.adspend ? c.roas.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "×" : "—", c.roas, p.roas, false],
     ["Orders", num(c.orders), c.orders, p.orders, false],
     ["Gem. orderwaarde", eur(c.aov), c.aov, p.aov, false],
     ["Retouren", num(c.retouren), c.retouren, p.retouren, true],
@@ -187,7 +186,6 @@ function renderChart() {
         { type: "bar", label: "Omzet", data: lastRows.map(rev), backgroundColor: "#2563eb" },
         { type: "bar", label: "Ad-omzet", data: lastRows.map((r) => Number(r.ad_revenue)), backgroundColor: "#16a34a" },
         { type: "bar", label: "Adspend", data: lastRows.map((r) => Number(r.ad_cost)), backgroundColor: "#f59e0b" },
-        { type: "line", label: "ROAS", yAxisID: "y1", data: lastRows.map((r) => Number(r.ad_cost) ? Number(r.ad_revenue) / Number(r.ad_cost) : 0), borderColor: "#7c3aed", borderWidth: 2, tension: .3, pointRadius: 2 },
       ],
     },
     options: {
@@ -195,7 +193,6 @@ function renderChart() {
       plugins: { legend: { position: "top" } },
       scales: {
         y: { beginAtZero: true, title: { display: true, text: "€" } },
-        y1: { beginAtZero: true, position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "ROAS ×" } },
       },
     },
   });
@@ -207,7 +204,6 @@ const COLS = [
   ["omzet", "Omzet", (r) => eur(BASIS === "incl" ? r.revenue_incl : r.revenue_excl), true],
   ["ad_cost", "Adspend", (r) => eur(r.ad_cost), true],
   ["ad_revenue", "Ad-omzet", (r) => eur(r.ad_revenue), true],
-  ["roas", "ROAS", (r) => (Number(r.ad_cost) ? (r.ad_revenue / r.ad_cost).toFixed(2) + "×" : "—"), true],
   ["returns_count", "Retouren", (r) => num(r.returns_count), true],
   ["netto", "Netto omzet", (r) => eur((BASIS === "incl" ? r.revenue_incl : r.revenue_excl) - (BASIS === "incl" ? r.returns_value_incl : r.returns_value_excl)), true],
 ];
