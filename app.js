@@ -8,6 +8,7 @@ let sortKey = "date", sortDir = -1;
 let currentView = "overview";
 let prodRows = [];               // geaggregeerd per product
 let prodSortKey = "omzet", prodSortDir = -1;
+let prodSearch = "";             // zoekterm productpagina
 const lineCache = {};            // product_id -> order_lines (drill-down)
 
 // ── formatting (NL) ────────────────────────────────────────────────
@@ -53,6 +54,7 @@ $("login-form").addEventListener("submit", async (e) => {
   if (error) $("login-err").textContent = "Inloggen mislukt: " + error.message;
 });
 $("logout").addEventListener("click", () => sb.auth.signOut());
+$("prod-search").addEventListener("input", (e) => { prodSearch = e.target.value; renderProducts(); });
 
 // ── periode ────────────────────────────────────────────────────────
 function range() {
@@ -245,51 +247,80 @@ async function loadProducts() {
   const map = {};
   (data || []).forEach((r) => {
     const m = map[r.product_id] || (map[r.product_id] = {
-      product_id: r.product_id, title: r.product_title, path: r.product_path,
-      qty: 0, orders: 0, revenue_incl: 0, revenue_excl: 0,
+      product_id: r.product_id, title: r.product_title, path: r.product_path, ean: r.ean || "",
+      qty: 0, orders: 0, sessions: 0, revenue_incl: 0, revenue_excl: 0,
     });
-    m.qty += +r.qty; m.orders += +r.orders;
+    m.qty += +r.qty; m.orders += +r.orders; m.sessions += +(r.sessions || 0);
     m.revenue_incl += +r.revenue_incl; m.revenue_excl += +r.revenue_excl;
     if (!m.title && r.product_title) m.title = r.product_title;
     if (!m.path && r.product_path) m.path = r.product_path;
+    if (!m.ean && r.ean) m.ean = r.ean;
   });
   prodRows = Object.values(map);
+  prodRows.forEach((r) => (r.conv = r.sessions ? (r.orders / r.sessions) * 100 : null));
   renderProducts();
 }
 
 function prodRev(r) { return Number(BASIS === "incl" ? r.revenue_incl : r.revenue_excl); }
 
+function convCell(r) {
+  if (r.conv == null) return '<span class="conv na">—</span>';
+  const cls = r.conv >= 4 ? "hi" : r.conv >= 1.5 ? "mid" : "lo";
+  return `<span class="conv ${cls}">${r.conv.toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</span>`;
+}
+function shareCell(r, totaal) {
+  const pct = totaal ? prodRev(r) / totaal * 100 : 0;
+  return `<div class="share"><span class="pct">${pct.toFixed(1)}%</span><span class="bar"><span style="width:${Math.min(pct, 100)}%"></span></span></div>`;
+}
+
 function renderProducts() {
   const totaal = prodRows.reduce((s, r) => s + prodRev(r), 0);
   const totQty = prodRows.reduce((s, r) => s + Number(r.qty), 0);
+  const totSess = prodRows.reduce((s, r) => s + Number(r.sessions), 0);
+  const totOrd = prodRows.reduce((s, r) => s + Number(r.orders), 0);
+  const avgConv = totSess ? (totOrd / totSess * 100) : null;
   $("prod-kpis").innerHTML = [
-    ["Productomzet", eur(totaal)], ["Producten", num(prodRows.length)], ["Stuks verkocht", num(totQty)],
+    ["Productomzet", eur(totaal)], ["Producten", num(prodRows.length)],
+    ["Stuks verkocht", num(totQty)],
+    ["Gem. conversie", avgConv == null ? "—" : avgConv.toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%"],
   ].map(([l, v]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v}</div></div>`).join("");
 
+  const L = "left";
   const cols = [
-    ["title", "Product", (r) => r.title || ("Product " + r.product_id)],
+    ["title", "Product", (r) => `<span class="pname">${r.title || ("Product " + r.product_id)}</span>`, L],
+    ["ean", "EAN", (r) => `<span class="ean">${r.ean || "—"}</span>`, L],
     ["qty", "Aantal", (r) => num(r.qty)],
     ["orders", "Orders", (r) => num(r.orders)],
+    ["sessions", "Sessies", (r) => num(r.sessions)],
+    ["conv", "Conversie", (r) => convCell(r)],
     ["omzet", "Omzet", (r) => eur(prodRev(r))],
-    ["aandeel", "Aandeel", (r) => (totaal ? (prodRev(r) / totaal * 100).toFixed(1) + "%" : "0%")],
+    ["aandeel", "Aandeel", (r) => shareCell(r, totaal)],
   ];
   const thead = document.querySelector("#products thead");
   const tbody = document.querySelector("#products tbody");
-  thead.innerHTML = "<tr><th></th>" + cols.map(([k, l]) =>
-    `<th data-k="${k}">${l}${prodSortKey === k ? (prodSortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("") + "</tr>";
+  thead.innerHTML = "<tr><th></th>" + cols.map(([k, l, , al]) =>
+    `<th data-k="${k}" style="text-align:${al === L ? "left" : "right"}">${l}${prodSortKey === k ? (prodSortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("") + "</tr>";
   thead.querySelectorAll("th[data-k]").forEach((th) => th.addEventListener("click", () => {
     const k = th.dataset.k;
     if (prodSortKey === k) prodSortDir *= -1; else { prodSortKey = k; prodSortDir = -1; }
     renderProducts();
   }));
-  const sv = (r, k) => (k === "omzet" || k === "aandeel") ? prodRev(r) : k === "title" ? (r.title || "").toLowerCase() : Number(r[k]);
-  const rows = [...prodRows].sort((a, b) => {
+  const sv = (r, k) => {
+    if (k === "omzet" || k === "aandeel") return prodRev(r);
+    if (k === "title") return (r.title || "").toLowerCase();
+    if (k === "ean") return r.ean || "";
+    if (k === "conv") return r.conv == null ? -1 : r.conv;
+    return Number(r[k]);
+  };
+  const q = prodSearch.trim().toLowerCase();
+  let rows = q ? prodRows.filter((r) => (r.title || "").toLowerCase().includes(q) || (r.ean || "").includes(q)) : prodRows;
+  rows = [...rows].sort((a, b) => {
     const va = sv(a, prodSortKey), vb = sv(b, prodSortKey);
     return (va > vb ? 1 : va < vb ? -1 : 0) * prodSortDir;
   });
   tbody.innerHTML = rows.map((r) =>
     `<tr class="prow" data-pid="${r.product_id}"><td><span class="caret">▸</span></td>` +
-    cols.map(([, , fn]) => `<td>${fn(r)}</td>`).join("") + "</tr>").join("");
+    cols.map(([, , fn, al]) => `<td style="text-align:${al === L ? "left" : "right"}">${fn(r)}</td>`).join("") + "</tr>").join("");
   tbody.querySelectorAll("tr.prow").forEach((tr) => tr.addEventListener("click", () => toggleProduct(tr)));
 }
 
@@ -309,7 +340,7 @@ async function toggleProduct(tr) {
   tr.querySelector(".caret").textContent = "▾";
   const detail = document.createElement("tr");
   detail.className = "detail";
-  detail.innerHTML = `<td colspan="6"><div class="detail-inner">Laden…</div></td>`;
+  detail.innerHTML = `<td colspan="${tr.children.length}"><div class="detail-inner">Laden…</div></td>`;
   tr.after(detail);
   const lines = await fetchLines(pid);
   detail.querySelector(".detail-inner").innerHTML = detailHtml(pid, lines);

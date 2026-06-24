@@ -70,12 +70,15 @@
       <section id="view-products" class="hidden">
         <div class="kpis" id="prod-kpis"></div>
         <div class="panel">
-          <h2>Omzet per product</h2>
-          <div class="muted" style="margin-bottom:8px">
-            Klik op een kolomkop om te sorteren · klik op een productrij om uit te klappen
-            (varianten + de losse orders).
+          <div class="panel-head">
+            <h2>Omzet per product</h2>
+            <input type="search" id="prod-search" placeholder="🔎 Zoek op productnaam of EAN…" />
           </div>
-          <div class="tablewrap"><table id="products"><thead></thead><tbody></tbody></table></div>
+          <div class="muted" style="margin-bottom:10px">
+            Klik op een kolomkop om te sorteren · klik op een productrij om uit te klappen
+            (varianten + losse orders). Conversie = orders ÷ sessies op de productpagina.
+          </div>
+          <div class="tablewrap"><table id="products" class="rich"><thead></thead><tbody></tbody></table></div>
         </div>
       </section>
     </main>
